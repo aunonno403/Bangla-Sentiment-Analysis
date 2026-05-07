@@ -1,0 +1,21 @@
+# Data Processing & Scientific Computing
+pandas==2.0.3
+numpy==1.24.3
+
+# Machine Learning
+scikit-learn==1.3.0
+
+# NLP - Bangla Specific
+nltk==3.8.1
+bengali-stemmer==0.2.2
+bnlp-toolkit==3.0.1
+
+# Visualization
+matplotlib==3.7.1
+seaborn==0.12.2
+
+# Frontend & Deployment
+streamlit==1.25.0
+
+# Utilities
+python-dotenv==1.0.0
