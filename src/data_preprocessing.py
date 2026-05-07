@@ -4,7 +4,7 @@ Data preprocessing for Bangla text.
 Handles:
 - Text normalization and cleaning
 - Tokenization
-- Stemming using bengali-stemmer
+- Stemming using bangla-stemmer
 - Feature extraction (TF-IDF)
 """
 
@@ -12,13 +12,13 @@ import re
 import pandas as pd
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
-from bengali_stemmer.stemmer import BengaliStemmer
+from bangla_stemmer.stemmer import stemmer as bangla_stemmer_module
 from sklearn.feature_extraction.text import TfidfVectorizer
 from typing import List, Tuple
 
 
 # Initialize Bengali stemmer
-stemmer = BengaliStemmer()
+stemmer = bangla_stemmer_module.BanglaStemmer()
 
 
 def normalize_bangla_text(text: str) -> str:
