@@ -9,15 +9,19 @@ Handles:
 """
 
 import re
+import logging
 import pandas as pd
-from nltk.tokenize import word_tokenize
+from bnlp import BasicTokenizer
 from nltk.corpus import stopwords
 from bangla_stemmer.stemmer import stemmer as bangla_stemmer_module
 from sklearn.feature_extraction.text import TfidfVectorizer
-from typing import List, Tuple
+from typing import List, Tuple, Optional
+
+logger = logging.getLogger(__name__)
 
 
-# Initialize Bengali stemmer
+# Initialize bnlp tokenizer and stemmer
+tokenizer = BasicTokenizer()
 stemmer = bangla_stemmer_module.BanglaStemmer()
 
 
@@ -31,8 +35,11 @@ def normalize_bangla_text(text: str) -> str:
     Returns:
         Normalized text
     """
-    # Convert to lowercase
-    text = text.lower()
+    # Handle NaN/None/non-string inputs
+    if text is None or (isinstance(text, float) and pd.isna(text)):
+        return ""
+    
+    text = str(text).lower()
     
     # Remove extra whitespace
     text = re.sub(r'\s+', ' ', text).strip()
@@ -46,7 +53,7 @@ def normalize_bangla_text(text: str) -> str:
 
 def tokenize_bangla(text: str) -> List[str]:
     """
-    Tokenize Bangla text into words.
+    Tokenize Bangla text into words using bnlp BasicTokenizer.
     
     Args:
         text: Normalized Bangla text
@@ -55,9 +62,9 @@ def tokenize_bangla(text: str) -> List[str]:
         List of tokens
     """
     try:
-        tokens = word_tokenize(text, language='bengali')
-    except:
-        # Fallback: simple split
+        tokens = tokenizer(text)
+    except Exception as e:
+        logger.warning(f"Error during tokenization: {e}. Using fallback split.")
         tokens = text.split()
     
     return tokens
@@ -75,7 +82,11 @@ def remove_stopwords(tokens: List[str]) -> List[str]:
     """
     try:
         bengali_stopwords = set(stopwords.words('bengali'))
-    except:
+    except LookupError:
+        logger.debug("NLTK stopwords resource not found; proceeding without stopword removal.")
+        bengali_stopwords = set()
+    except Exception as e:
+        logger.warning(f"Error loading Bengali stopwords: {e}. Proceeding without stopword removal.")
         bengali_stopwords = set()
     
     return [token for token in tokens if token not in bengali_stopwords]
@@ -91,7 +102,14 @@ def stem_bangla(tokens: List[str]) -> List[str]:
     Returns:
         Stemmed tokens
     """
-    return [stemmer.stem(token) for token in tokens]
+    stemmed = []
+    for token in tokens:
+        try:
+            stemmed.append(stemmer.stem(token))
+        except Exception as e:
+            logger.debug(f"Error stemming token '{token}': {e}. Keeping original.")
+            stemmed.append(token)
+    return stemmed
 
 
 def preprocess_text(text: str) -> str:
@@ -104,6 +122,10 @@ def preprocess_text(text: str) -> str:
     Returns:
         Preprocessed text (space-separated tokens)
     """
+    # Handle NaN/None inputs early
+    if text is None or (isinstance(text, float) and pd.isna(text)):
+        return ""
+    
     # Normalize
     normalized = normalize_bangla_text(text)
     
@@ -120,23 +142,33 @@ def preprocess_text(text: str) -> str:
     return ' '.join(tokens)
 
 
-def preprocess_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+def preprocess_dataframe(df: pd.DataFrame, text_column: str = 'text') -> pd.DataFrame:
     """
     Apply preprocessing to entire DataFrame.
     
     Args:
-        df: DataFrame with 'text' column
+        df: DataFrame with text column
+        text_column: Name of the text column to preprocess (default: 'text')
         
     Returns:
         DataFrame with 'cleaned_text' column added
     """
     df_copy = df.copy()
-    df_copy['cleaned_text'] = df_copy['text'].apply(preprocess_text)
+    
+    # Ensure text column exists
+    if text_column not in df_copy.columns:
+        logger.warning(f"Column '{text_column}' not found in DataFrame. Available columns: {df_copy.columns.tolist()}")
+        return df_copy
+    
+    # Apply preprocessing with NaN-safe handling
+    df_copy['cleaned_text'] = df_copy[text_column].apply(
+        lambda x: preprocess_text(x) if pd.notna(x) else ""
+    )
     
     return df_copy
 
 
-def create_tfidf_features(df_train: pd.DataFrame, df_test: pd.DataFrame = None, max_features: int = 5000):
+def create_tfidf_features(df_train: pd.DataFrame, df_test: Optional[pd.DataFrame] = None, max_features: int = 5000):
     """
     Create TF-IDF features from preprocessed text.
     
