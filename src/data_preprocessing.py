@@ -25,6 +25,15 @@ tokenizer = BasicTokenizer()
 stemmer = bangla_stemmer_module.BanglaStemmer()
 
 
+# Module-level helpers so objects referencing them are pickleable
+def whitespace_tokenizer(text: str):
+    return text.split()
+
+
+def identity_preprocessor(x: str):
+    return x
+
+
 def normalize_bangla_text(text: str) -> str:
     """
     Normalize Bangla text: handle unicode, remove diacritics, etc.
@@ -89,6 +98,39 @@ def remove_stopwords(tokens: List[str]) -> List[str]:
         logger.warning(f"Error loading Bengali stopwords: {e}. Proceeding without stopword removal.")
         bengali_stopwords = set()
     
+    # Add project-specific domain tokens that are not useful for sentiment
+    # (common but sentiment-neutral tokens). Update this set as needed.
+    CUSTOM_DOMAIN_STOPWORDS = {
+        'ভিডি',  # video
+        'আজক',  # today (colloquial/typo variants)
+        'আজ',   # today
+        'মন',   # mind/feeling (often neutral context words)
+        # keep 'খুব' (intensifier) -- don't remove as stopword
+        'সবক',
+        'ভিডিও',
+        'সব',
+        'অভিজ্ঞতা',
+        'আমি',
+        'আম',  # prefix-like token from preprocessing
+    }
+    # Additional neutral/common tokens identified from feature inspection
+    # (added to reduce their influence on class coefficients)
+    ADDITIONAL_NEUTRAL_TOKENS = {
+        'পেট',
+        'ফাট',
+        'দিন',
+        'নষ্ট',
+        'সময়',
+        'ভয়ঙ্কর',
+        'আছি',
+        'সবকিছু',
+        # keep 'লাগ' (important sentiment cue)
+    }
+
+    bengali_stopwords = bengali_stopwords | ADDITIONAL_NEUTRAL_TOKENS
+
+    bengali_stopwords = bengali_stopwords | CUSTOM_DOMAIN_STOPWORDS
+
     return [token for token in tokens if token not in bengali_stopwords]
 
 
@@ -168,7 +210,7 @@ def preprocess_dataframe(df: pd.DataFrame, text_column: str = 'text') -> pd.Data
     return df_copy
 
 
-def create_tfidf_features(df_train: pd.DataFrame, df_test: Optional[pd.DataFrame] = None, max_features: int = 5000):
+def create_tfidf_features(df_train: pd.DataFrame, df_test: Optional[pd.DataFrame] = None, max_features: int = 5000, ngram_range=(1, 1)):
     """
     Create TF-IDF features from preprocessed text.
     
@@ -180,8 +222,20 @@ def create_tfidf_features(df_train: pd.DataFrame, df_test: Optional[pd.DataFrame
     Returns:
         Tuple of (vectorizer, train_features, test_features or None)
     """
-    vectorizer = TfidfVectorizer(max_features=max_features, max_df=0.95, min_df=2)
-    
+    # Use min_df=1 to include tokens that may appear infrequently,
+    # which is helpful for small but meaningful Bangla tokens.
+    # Use whitespace tokenization because text is already preprocessed (tokens separated by spaces)
+    # and set lowercase=False to preserve preprocessed casing (already lowered in normalize)
+    vectorizer = TfidfVectorizer(
+        max_features=max_features,
+        max_df=0.95,
+        min_df=1,
+        tokenizer=whitespace_tokenizer,
+        preprocessor=identity_preprocessor,
+        lowercase=False,
+        ngram_range=ngram_range,
+    )
+
     X_train = vectorizer.fit_transform(df_train['cleaned_text'])
     X_test = vectorizer.transform(df_test['cleaned_text']) if df_test is not None else None
     
