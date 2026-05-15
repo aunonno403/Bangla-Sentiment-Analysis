@@ -5,6 +5,8 @@ import joblib
 import numpy as np
 
 from data_preprocessing import preprocess_text
+import json
+from pathlib import Path
 
 
 def _softmax(x: np.ndarray) -> np.ndarray:
@@ -54,25 +56,31 @@ class SentimentPredictor:
             else:
                 self.le = None
 
-            # Expanded lexicon for short-text fallback (preprocessed/stemmed forms and phrase fragments)
-            # Map label -> set of keyword stems/phrase fragments. Keep entries conservative.
-            self._fallback_lexicon = {
-                'Happy': {
-                    'ভালো', 'খুশি', 'সুখ', 'মজা', 'ভাল', 'ভালো লাগ', 'খুব ভালো', 'খুবভালো'
-                },
-                'Sad': {
-                    'খারাপ', 'দুঃখ', 'দুঃখিত', 'বিষাদ', 'খারাপ লাগ', 'খুব খারাপ', 'দুঃখে'
-                },
-                'Toxic': {
-                    'ঘৃণা', 'নোংরা', 'গালি', 'অশ্লীল', 'বহিষ্কার'
-                },
-                'Funny': {
-                    'রসিক', 'হাস্য', 'মজার', 'হাসি', 'চল', 'মজাই'
-                },
-                'Neutral': {
-                    'যেমন', 'আশা', 'করেছি', 'তেমন', 'মোটামু', 'মোটামুটি', 'এটা', 'ছিল'
+            # Load lexicon from data/lexicon.json if available; otherwise fall back to small builtin set
+            lex_path = Path('data/lexicon.json')
+            if lex_path.exists():
+                try:
+                    with open(lex_path, 'r', encoding='utf-8') as f:
+                        raw = json.load(f)
+                    # convert lists to sets for faster membership checks
+                    self._fallback_lexicon = {k: set(v) for k, v in raw.items()}
+                except Exception:
+                    # fallback if file parse fails
+                    self._fallback_lexicon = {
+                        'Happy': {'ভালো', 'খুশি', 'সুখ'},
+                        'Sad': {'খারাপ', 'দুঃখ'},
+                        'Toxic': {'ঘৃণা', 'গালি'},
+                        'Funny': {'রসিক', 'হাসি'},
+                        'Neutral': {'যেমন', 'তেমন'}
+                    }
+            else:
+                self._fallback_lexicon = {
+                    'Happy': {'ভালো', 'খুশি', 'সুখ'},
+                    'Sad': {'খারাপ', 'দুঃখ'},
+                    'Toxic': {'ঘৃণা', 'গালি'},
+                    'Funny': {'রসিক', 'হাসি'},
+                    'Neutral': {'যেমন', 'তেমন'}
                 }
-            }
 
     def _get_confidence(self, features) -> Optional[float]:
         # prefer predict_proba
@@ -90,20 +98,29 @@ class SentimentPredictor:
 
     def predict(self, text: str) -> Tuple[str, Optional[float]]:
         cleaned = preprocess_text(text)
-        # Short-text / zero-feature fallback using lexicon
         tokens = cleaned.split()
-        # Function to consult lexicon: check token equality or substring match
+
+        # Build list of (label, kw) and sort by keyword length (longer first)
+        pairs = []
+        for label, keywords in self._fallback_lexicon.items():
+            for kw in keywords:
+                if not kw:
+                    continue
+                pairs.append((label, kw))
+        pairs.sort(key=lambda x: len(x[1]), reverse=True)
+
+        # Exact token matches should override the model for curated keywords.
+        # This avoids short generic words like 'লাগ' winning over specific sad cues like 'কান্ন'.
+        for label, kw in pairs:
+            if any(kw == t for t in tokens):
+                return label, 0.95
+
+        # Short-text / zero-feature fallback using lexicon substring matches
         def _consult_lexicon(text_str: str):
-            for label, keywords in self._fallback_lexicon.items():
-                for kw in keywords:
-                    if kw == '':
-                        continue
-                    # direct token in cleaned
-                    if kw in text_str:
-                        return label
-                    # check token-level equality
-                    if any(kw == t for t in tokens):
-                        return label
+            # Build list of (label, kw) and sort by keyword length (longer first)
+            for label, kw in pairs:
+                if kw in text_str:
+                    return label
             return None
 
         # If very short (<=2 tokens) consult lexicon first

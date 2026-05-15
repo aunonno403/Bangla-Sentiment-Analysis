@@ -60,6 +60,17 @@ def normalize_bangla_text(text: str) -> str:
     return text
 
 
+# Conservative mapping of common variant tokens to normalized/stem-like forms
+# Use this to capture variants that the stemmer or tokenizer may not normalize.
+# Update when new variants are observed.
+NORMALIZATION_MAP = {
+    'মোটামুটি': 'মোটামু',
+    'মোটামুটিা': 'মোটামু',
+    'আজকের': 'আজক',
+    'আজকে': 'আজ',
+}
+
+
 def tokenize_bangla(text: str) -> List[str]:
     """
     Tokenize Bangla text into words using bnlp BasicTokenizer.
@@ -176,6 +187,10 @@ def preprocess_text(text: str) -> str:
     
     # Remove stopwords
     tokens = remove_stopwords(tokens)
+
+    # Apply conservative normalization mappings (token -> mapped token)
+    if tokens:
+        tokens = [NORMALIZATION_MAP.get(t, t) for t in tokens]
     
     # Stem
     tokens = stem_bangla(tokens)
