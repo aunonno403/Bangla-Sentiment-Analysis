@@ -18,6 +18,17 @@ downloads/
 eggs/
 .eggs/
 lib/
+
+# Release and packaging
+release/
+*.zip
+
+# Notebooks
+*.ipynb
+
+# Trained models folder
+models/
+
 lib64/
 parts/
 sdist/
@@ -58,6 +69,9 @@ data/processed/*.csv
 
 # Logs
 *.log
+
+# Local project notes
+/pla.md
 
 # OS
 .DS_Store
