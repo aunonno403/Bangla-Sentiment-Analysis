@@ -62,7 +62,7 @@ def main():
 
     # Hybrid vectorizer: word n-grams + char n-grams
     word_vectorizer = TfidfVectorizer(
-        max_features=12000,
+        max_features=30000,
         max_df=0.95,
         min_df=1,
         tokenizer=dp.whitespace_tokenizer,
@@ -72,7 +72,7 @@ def main():
     )
 
     char_vectorizer = TfidfVectorizer(
-        max_features=20000,
+        max_features=50000,
         analyzer='char_wb',
         ngram_range=(3, 5),
         lowercase=False,

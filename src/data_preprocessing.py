@@ -142,6 +142,10 @@ def remove_stopwords(tokens: List[str]) -> List[str]:
 
     bengali_stopwords = bengali_stopwords | CUSTOM_DOMAIN_STOPWORDS
 
+    # Ensure common negation tokens are NOT removed; they are important for sentiment polarity
+    NEGATION_TOKENS = {'না', 'নেই', 'নয়'}
+    bengali_stopwords = bengali_stopwords - NEGATION_TOKENS
+
     return [token for token in tokens if token not in bengali_stopwords]
 
 
@@ -251,8 +255,15 @@ def create_tfidf_features(df_train: pd.DataFrame, df_test: Optional[pd.DataFrame
         ngram_range=ngram_range,
     )
 
-    X_train = vectorizer.fit_transform(df_train['cleaned_text'])
-    X_test = vectorizer.transform(df_test['cleaned_text']) if df_test is not None else None
+    # Ensure cleaned_text columns are string and contain no NaN values
+    df_train = df_train.copy()
+    df_train['cleaned_text'] = df_train['cleaned_text'].fillna('').astype(str)
+    if df_test is not None:
+        df_test = df_test.copy()
+        df_test['cleaned_text'] = df_test['cleaned_text'].fillna('').astype(str)
+
+    X_train = vectorizer.fit_transform(df_train['cleaned_text'].tolist())
+    X_test = vectorizer.transform(df_test['cleaned_text'].tolist()) if df_test is not None else None
     
     return vectorizer, X_train, X_test
 

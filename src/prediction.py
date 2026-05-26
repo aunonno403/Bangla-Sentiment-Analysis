@@ -109,6 +109,14 @@ class SentimentPredictor:
                 pairs.append((label, kw))
         pairs.sort(key=lambda x: len(x[1]), reverse=True)
 
+        # Handle simple negation patterns: if a negation token appears together
+        # with a positive keyword (e.g. 'ভালো নেই'), treat as `Sad`.
+        negation_tokens = {'না', 'নেই', 'নয়', 'নেই'}
+        positive_kw_set = set(self._fallback_lexicon.get('Happy', set()))
+        if any(nt in tokens for nt in negation_tokens):
+            if any((pw in tokens) or (pw in cleaned) for pw in positive_kw_set):
+                return 'Sad', 0.95
+
         # Exact token matches should override the model for curated keywords.
         # This avoids short generic words like 'লাগ' winning over specific sad cues like 'কান্ন'.
         for label, kw in pairs:
